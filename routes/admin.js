@@ -58,6 +58,52 @@ router.get('/logout', (req, res) => {
   });
 });
 
+// --- Account / Change Password ---
+
+router.get('/account', requireAdmin, (req, res) => {
+  res.render('admin/account', { adminName: req.session.adminName, error: null, success: null });
+});
+
+router.post('/account/password', requireAdmin, async (req, res) => {
+  const { current_password, new_password, confirm_password } = req.body;
+  const render = (opts) => res.render('admin/account', Object.assign(
+    { adminName: req.session.adminName, error: null, success: null }, opts
+  ));
+
+  try {
+    if (!current_password || !new_password || !confirm_password) {
+      return render({ error: 'All fields are required.' });
+    }
+    if (new_password.length < 8) {
+      return render({ error: 'New password must be at least 8 characters.' });
+    }
+    if (new_password !== confirm_password) {
+      return render({ error: 'New password and confirmation do not match.' });
+    }
+
+    const { rows } = await pool.query('SELECT * FROM admin_users WHERE id = $1', [req.session.adminId]);
+    if (rows.length === 0) {
+      return render({ error: 'Account not found.' });
+    }
+    const admin = rows[0];
+
+    const match = await bcrypt.compare(current_password, admin.password_hash);
+    if (!match) {
+      return render({ error: 'Current password is incorrect.' });
+    }
+    if (await bcrypt.compare(new_password, admin.password_hash)) {
+      return render({ error: 'New password must be different from your current password.' });
+    }
+
+    const newHash = await bcrypt.hash(new_password, 10);
+    await pool.query('UPDATE admin_users SET password_hash = $1 WHERE id = $2', [newHash, admin.id]);
+    return render({ success: 'Password updated successfully.' });
+  } catch (err) {
+    console.error('Password change error:', err);
+    return render({ error: 'Something went wrong. Please try again.' });
+  }
+});
+
 // --- Protected Admin Routes ---
 
 router.get('/dashboard', requireAdmin, async (req, res) => {
