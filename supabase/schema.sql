@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS listings (
   city                 VARCHAR(100) NOT NULL,
   state                VARCHAR(2)  NOT NULL DEFAULT 'NY',
   bedrooms             INTEGER     NOT NULL DEFAULT 0,
-  bathrooms            INTEGER     NOT NULL DEFAULT 1,
+  bathrooms            NUMERIC(3,1) NOT NULL DEFAULT 1,
   sqft                 INTEGER,
   price_monthly        INTEGER     NOT NULL,
   status               VARCHAR(20) NOT NULL DEFAULT 'coming_soon',

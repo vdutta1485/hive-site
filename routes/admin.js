@@ -211,7 +211,7 @@ router.post('/listings', requireAdmin, upload.fields([{ name: 'image_files', max
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
     `, [
       title, location || 'New York', neighborhood, city, state || 'NY',
-      parseInt(bedrooms) || 0, parseInt(bathrooms) || 1,
+      parseInt(bedrooms) || 0, parseFloat(bathrooms) || 1,
       sqft ? parseInt(sqft) : null, parseInt(price_monthly),
       status || 'coming_soon',
       available_from || null, available_to || null,
@@ -339,7 +339,7 @@ router.post('/listings/:id', requireAdmin, upload.fields([{ name: 'image_files',
       WHERE id = $32
     `, [
       title, location || 'New York', neighborhood, city, state || 'NY',
-      parseInt(bedrooms) || 0, parseInt(bathrooms) || 1,
+      parseInt(bedrooms) || 0, parseFloat(bathrooms) || 1,
       sqft ? parseInt(sqft) : null, parseInt(price_monthly),
       status || 'coming_soon',
       available_from || null, available_to || null,

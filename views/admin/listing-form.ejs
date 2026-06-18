@@ -679,8 +679,11 @@
             <div class="form-group">
               <label for="bathrooms">Bathrooms</label>
               <select id="bathrooms" name="bathrooms">
-                <option value="1" <%= (listing && listing.bathrooms == 1) ? 'selected' : '' %>>1</option>
-                <option value="2" <%= (listing && listing.bathrooms == 2) ? 'selected' : '' %>>2</option>
+                <% var _bvals = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]; %>
+                <% var _bcur = listing ? parseFloat(listing.bathrooms) : null; %>
+                <% _bvals.forEach(function(b) { %>
+                  <option value="<%= b %>" <%= (_bcur === b) ? 'selected' : '' %>><%= b %></option>
+                <% }); %>
               </select>
             </div>
             <div class="form-group">

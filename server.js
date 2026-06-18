@@ -37,6 +37,7 @@ app.use(session({
 (async () => {
   try {
     const migrations = [
+      `ALTER TABLE listings ALTER COLUMN bathrooms TYPE NUMERIC(3,1)`,
       `ALTER TABLE listings ADD COLUMN IF NOT EXISTS floor VARCHAR(50)`,
       `ALTER TABLE listings ADD COLUMN IF NOT EXISTS min_stay INTEGER DEFAULT 30`,
       `ALTER TABLE listings ADD COLUMN IF NOT EXISTS pet_policy TEXT`,
