@@ -4,6 +4,27 @@ const pool = require('../db/pool');
 const nodemailer = require('nodemailer');
 const { getGoogleReviews } = require('../utils/googleReviews');
 
+// Where inquiry/application notifications are delivered.
+const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || 'Vdutta1485@hotmail.com';
+
+// Send an inquiry notification email. Centralizes the SMTP transport so both
+// the tenant-application and landlord-inquiry routes share one code path.
+// Throws on failure so callers can log it; it never blocks saving the inquiry.
+async function sendInquiryEmail({ subject, html }) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.warn(`[mail] SMTP not configured (SMTP_USER/SMTP_PASS missing) — "${subject}" not sent. Set them to receive inquiry emails.`);
+    return;
+  }
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: false,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+  });
+  await transporter.sendMail({ from: process.env.SMTP_USER, to: NOTIFY_EMAIL, subject, html });
+  console.log(`[mail] Sent "${subject}" to ${NOTIFY_EMAIL}`);
+}
+
 router.get('/', async (req, res) => {
   try {
     // One listing per property: rooms in the same unit share title + city, so
@@ -133,22 +154,11 @@ router.post('/apply', async (req, res) => {
       [full_name, email, phone || null, about, social_media]
     );
 
-    // Send email notification
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_USER,
-      to: 'Vdutta1485@hotmail.com',
-      subject: `New Hive Application: ${full_name}`,
-      html: `
+    // Send email notification (best-effort — the inquiry is already saved)
+    try {
+      await sendInquiryEmail({
+        subject: `New Hive Application: ${full_name}`,
+        html: `
         <h2>New Tenant Application</h2>
         <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
           <tr><td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; width: 160px;">Name</td><td style="padding: 10px; border-bottom: 1px solid #eee;">${full_name}</td></tr>
@@ -159,7 +169,10 @@ router.post('/apply', async (req, res) => {
         </table>
         <p style="margin-top: 20px; color: #888; font-size: 12px;">Submitted via Hive Application Form</p>
       `
-    });
+      });
+    } catch (mailErr) {
+      console.error('[mail] Failed to send application notification:', mailErr.message);
+    }
 
     res.render('public/apply', { success: true });
   } catch (err) {
@@ -185,22 +198,11 @@ router.post('/partners/apply', async (req, res) => {
       [full_name, email, phone || null, property_location, num_units || null, property_type || null, message, referral_source || null]
     );
 
-    // Send email notification
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_USER,
-      to: 'Vdutta1485@hotmail.com',
-      subject: `New Landlord Inquiry: ${full_name}`,
-      html: `
+    // Send email notification (best-effort — the inquiry is already saved)
+    try {
+      await sendInquiryEmail({
+        subject: `New Landlord Inquiry: ${full_name}`,
+        html: `
         <h2>New Landlord Inquiry</h2>
         <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
           <tr><td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; width: 160px;">Name</td><td style="padding: 10px; border-bottom: 1px solid #eee;">${full_name}</td></tr>
@@ -214,7 +216,10 @@ router.post('/partners/apply', async (req, res) => {
         </table>
         <p style="margin-top: 20px; color: #888; font-size: 12px;">Submitted via Hive Landlord Inquiry Form</p>
       `
-    });
+      });
+    } catch (mailErr) {
+      console.error('[mail] Failed to send landlord inquiry notification:', mailErr.message);
+    }
 
     res.render('public/landlord-apply', { success: true });
   } catch (err) {
