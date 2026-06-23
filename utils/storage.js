@@ -7,10 +7,37 @@
 
 const path = require('path');
 const fs = require('fs');
+const sharp = require('sharp');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'listings';
+
+// On-upload image optimization: resize oversized photos and re-encode to WebP so
+// the bucket stays small. Tunable via env. Only raster photos are converted;
+// SVG/GIF pass through untouched (vector / animation would be lost).
+const IMAGE_MAX_WIDTH = parseInt(process.env.IMAGE_MAX_WIDTH || '2000', 10);
+const IMAGE_WEBP_QUALITY = parseInt(process.env.IMAGE_WEBP_QUALITY || '80', 10);
+const OPTIMIZABLE_MIME = /^image\/(jpeg|png|webp)$/i;
+
+// Returns { buffer, ext, contentType }. Falls back to the original bytes on any
+// failure or for non-convertible types, so uploads never break.
+async function optimizeImage(file) {
+  if (!file || !OPTIMIZABLE_MIME.test(file.mimetype || '')) {
+    return { buffer: file.buffer, ext: path.extname(file.originalname || ''), contentType: file.mimetype };
+  }
+  try {
+    const buffer = await sharp(file.buffer, { failOn: 'none' })
+      .rotate() // bake EXIF orientation before resizing
+      .resize({ width: IMAGE_MAX_WIDTH, height: IMAGE_MAX_WIDTH, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: IMAGE_WEBP_QUALITY })
+      .toBuffer();
+    return { buffer, ext: '.webp', contentType: 'image/webp' };
+  } catch (err) {
+    console.warn('[storage] image optimization failed, storing original:', err.message);
+    return { buffer: file.buffer, ext: path.extname(file.originalname || ''), contentType: file.mimetype };
+  }
+}
 
 let supabase = null;
 if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
@@ -26,12 +53,14 @@ function uniqueName(originalName) {
 
 // Persist a single in-memory multer file and return a URL/path string
 // suitable for storing in the `listings.images` / `floor_plan_image` columns.
+// Photos are optimized (resized + WebP) before upload.
 async function storeImage(file) {
-  const name = uniqueName(file.originalname);
+  const { buffer, ext, contentType } = await optimizeImage(file);
+  const name = Date.now() + '-' + Math.round(Math.random() * 1e6) + (ext || '');
 
   if (supabase) {
-    const { error } = await supabase.storage.from(BUCKET).upload(name, file.buffer, {
-      contentType: file.mimetype,
+    const { error } = await supabase.storage.from(BUCKET).upload(name, buffer, {
+      contentType,
       upsert: false
     });
     if (error) throw new Error('Supabase Storage upload failed: ' + error.message);
@@ -42,7 +71,7 @@ async function storeImage(file) {
   // Local fallback
   const dir = path.join(__dirname, '..', 'public', 'uploads');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), file.buffer);
+  fs.writeFileSync(path.join(dir, name), buffer);
   return '/uploads/' + name;
 }
 
